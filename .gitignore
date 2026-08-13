@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Dữ liệu runtime của app (KHÔNG commit — máy khác chạy sẽ tự tạo lại)
+PDF_ChromaDB/
+chat_history.db
+tmp/
+benchmark/results.csv
+benchmark/output/
+
+# Secrets
+.env
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
