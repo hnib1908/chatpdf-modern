@@ -1,59 +1,72 @@
-# Chat with PDF — Modern UI 
+# Chat PDF - Ứng dụng RAG Hiện đại
 
-Giao diện SaaS hiện đại (kiểu ChatGPT/Claude/Perplexity) cho ứng dụng RAG chat-với-PDF chạy hoàn toàn local qua **Ollama**. Toàn bộ logic backend (đọc PDF, chunking, embedding, ChromaDB, retrieval + BM25/semantic re-ranking, gọi LLM) được **giữ nguyên** từ repo gốc — xem ghi chú ở đầu mỗi file trong `core/` để biết chính xác thay đổi gì (rất ít, chỉ mang tính bổ sung).
+Ứng dụng chat với PDF sử dụng mô hình **Retrieval-Augmented Generation (RAG)** chạy hoàn toàn local. Giao diện hiện đại dạng ChatGPT với hỗ trợ streaming, trích dẫn nguồn, và chế độ dark/light.
+
+## Giới thiệu mô hình
+
+### Kiến trúc RAG
+Hệ thống sử dụng mô hình RAG (Retrieval-Augmented Generation) gồm các thành phần:
+
+- **Embedding Model** (nomic-embed-text): Chuyển đổi text/câu hỏi thành vector embedding
+- **Vector Database** (ChromaDB): Lưu trữ và tìm kiếm các embedding của documents
+- **Retrieval & Re-ranking**:
+  - BM25: Tìm kiếm keyword-based
+  - Semantic Similarity: Tìm kiếm dựa trên ngữ nghĩa
+  - Kết hợp 2 phương pháp (50-50) để lấy top-K đoạn văn phù hợp nhất
+  - Re-order theo vị trí trong tài liệu gốc để đảm bảo thứ tự đọc tự nhiên
+- **LLM** (Ollama hoặc Sambanova): Sinh câu trả lời dựa trên context được retrieve
+
+### Quy trình hoạt động
+1. **Upload PDF** → Chuyển thành Markdown → Chia nhỏ thành chunks
+2. **Indexing** → Tạo embedding cho mỗi chunk → Lưu vào ChromaDB
+3. **Query** → Tìm kiếm top-K chunks liên quan → Re-rank → Build context
+4. **Generation** → Gửi context + câu hỏi tới LLM → Streaming response
+5. **Citation** → Hiển thị các chunks đã dùng để trả lời
+
+## Yêu cầu hệ thống
+
+- Python 3.8+
+- Ollama (để chạy embedding + LLM local)
+- 4GB+ RAM khuyến nghị
+
+## Cách chạy
+
+### 1. Cài đặt Ollama
+- Tải từ https://ollama.com/
+- Pull các model cần thiết:
+  ```bash
+  ollama pull nomic-embed-text:latest  # Model embedding (bắt buộc)
+  ollama pull qwen2.5:latest           # Model trả lời (hoặc model khác)
+  ```
+
+### 2. Cài đặt Python dependencies
+```bash
+pip install -r requirements.txt
+python -m nltk.downloader punkt punkt_tab
+```
+
+### 3. Chạy ứng dụng
+```bash
+streamlit run app.py
+```
+Mở trình duyệt: `http://localhost:8501`
+
+### Sử dụng LLM cloud (Sambanova)
+- Copy `.env.example` thành `.env`
+- Điền API key hoặc nhập trực tiếp ở sidebar
 
 ## Cấu trúc dự án
 
 ```
-chatpdf-modern/
-├── rag_core/               # Logic RAG gốc — không đổi thuật toán (đổi tên từ "core" để tránh trùng tên package)
-│   ├── rag.py
-│   ├── llm_inference.py
-│   └── md_convertor.py
-├── app_services/
-│   └── ingest_service.py  # Ingest PDF (tách từ app.py gốc), hỗ trợ nhiều PDF (đổi tên từ "services" để tránh trùng tên package)
-├── ui/
-│   ├── theme.py           # CSS light/dark mode
-│   └── components.py      # Sidebar, chat bubble, citation accordion
-├── app.py                 # Điểm khởi chạy Streamlit (UI mới)
-├── requirements.txt
-└── .env.example
+├── rag_core/              # Logic RAG chính
+│   ├── rag.py            # Retrieval + re-ranking
+│   ├── llm_inference.py  # Gọi Ollama/Sambanova
+│   └── md_convertor.py   # Xử lý PDF
+├── app_services/         # Services
+│   └── ingest_service.py # Upload & indexing PDF
+├── ui/                   # UI components
+│   ├── components.py     # Chat UI, sidebar
+│   └── theme.py          # Dark/light theme
+├── app.py                # Entry point (Streamlit)
+└── requirements.txt
 ```
-
-## Chạy ứng dụng (3 bước)
-
-1. **Cài đặt Ollama và pull model** (bắt buộc — chạy hoàn toàn local):
-   ```bash
-   # Cài Ollama: https://ollama.com/
-   ollama pull nomic-embed-text:latest   # model embedding, bắt buộc
-   ollama pull qwen2.5:latest            # hoặc model bạn muốn dùng để trả lời
-   ```
-
-2. **Cài thư viện Python và dữ liệu NLTK**:
-   ```bash
-   pip install -r requirements.txt
-   python -m nltk.downloader punkt punkt_tab
-   ```
-
-3. **Chạy ứng dụng**:
-   ```bash
-   streamlit run app.py
-   ```
-   Mở trình duyệt tại `http://localhost:8501`.
-
-> Muốn dùng Sambanova (cloud) thay vì Ollama? Copy `.env.example` thành `.env` và điền `API_KEY`, hoặc nhập trực tiếp API key ở sidebar.
-
-
-
-## Tính năng UI/UX
-
-- **Sidebar**: trạng thái Ollama (● xanh/đỏ), upload PDF kéo-thả (đa tệp), danh sách PDF đã lập chỉ mục kèm nút chọn ✅ / xoá 🗑️, cấu hình nhanh (model, chunk size, top-K, temperature), nút "Cuộc trò chuyện mới".
-- **Khung chat**: bong bóng user/assistant có avatar, `st.chat_input` hỗ trợ Enter gửi / Shift+Enter xuống dòng theo mặc định của Streamlit.
-- **Streaming**: bật/tắt hiệu ứng gõ chữ (chỉ áp dụng khi dùng Ollama).
-- **Citation Accordion**: mỗi câu trả lời có mục "📚 Nguồn trích dẫn" thu gọn/mở rộng, hiển thị đúng các đoạn văn bản đã dùng để trả lời (không có số trang cụ thể — repo gốc không tách text theo trang; nếu cần, có thể bật `page_chunks=True` trong `pymupdf4llm.to_markdown` ở bước ingest).
-- **Dark/Light mode**: toggle 🌙 ở đầu sidebar.
-
-## Giới hạn hiện tại
-
-- Streaming typewriter chỉ hoạt động với nhà cung cấp **Ollama** (Sambanova trả kết quả một cục, giữ nguyên hành vi gốc).
-- Chọn "tài liệu đang hỏi-đáp" là chọn 1 PDF tại 1 thời điểm (không truy vấn đồng thời nhiều PDF) — có thể mở rộng thêm nếu cần.
